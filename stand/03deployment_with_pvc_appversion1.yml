@@ -1,0 +1,79 @@
+---
+apiVersion: apps/v1
+kind: Deployment # тип ресурса в кубере, самое важное поле
+metadata:
+  name: deployment-to-persistent-nodes-pvc-appversion1 # имя деплоймента, именно к нему идёт привязка, если задеплоить, потом переименовать и задеплоить снова то и со старым именем будет деплой и с новым
+spec:
+  replicas: 2
+  selector:
+    matchLabels:      # задаём, что наш деплоймент рулит нодами, у которых эти лейбы
+      instance: persistent-pvc # ERROR Deployment is invalid spec.selector Invalid value field is immutable # если мы меняем это значение, деплоймент надо пересозавать
+  template:
+    metadata:
+      labels:
+        instance: persistent-pvc
+        appversion: version1
+    spec:
+      containers:
+      - image: adv4000/k8sphp:version1
+        name: k8sphp
+        ports:
+        - containerPort: 80
+        volumeMounts:
+          - name: my-static-data
+            mountPath: /katalog-data-inside-container
+      volumes:
+        - name: my-static-data
+          persistentVolumeClaim:
+            claimName: my-claim-for-static-disk
+###############################################################################################################################
+--- # PersistentVolumeClaim это запрос от кубера, какого типа мы хотим хранилище, чтобы понимать его скорость и тип, а во вторых - размер
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-claim-for-static-disk
+spec:
+  storageClassName: my-storage-class-local-disk-not-so-fast # в значениии указываем storage-класс, с которого хотим получить раздел.
+  accessModes: # параметр доступа к разделу. (В моем случаи полный доступ)
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi # здесь указываем запрашиваемые нами ресурсы для тома. 1 гигабайт спейса.
+###############################################################################################################################
+--- # StorageClass - Через объекты storage классов, осуществляется связвание pvc и pv. В нашем случаи создается объект storage class, с указанием заглушки - kubernetes.io/no-provisioner
+    # опеределяет политики по классу хранения, самая полезная - провизионинг
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: my-storage-class-local-disk-not-so-fast # имя сторадж класса, обратите внимание что pv созданный ранее будет ссылаться на этот storageclass.
+provisioner: kubernetes.io/no-provisioner # локальный типы разделов не поддерживают провижининг, поэтому в значении указываем заглушку.
+volumeBindingMode: WaitForFirstConsumer # режим монтирование разделов. В нашем значении говориться, что раздел будет создан при появлении потребителя/клиента.
+###############################################################################################################################
+---
+# PersistentVolume pv.yml
+apiVersion: v1 # apiVersion - версию api сервера,
+kind: PersistentVolume # kind - тип создаваемого объекта в кубернетес,
+metadata:
+  name: my-static-volume-that-match-my-clame # metadata/name - в поле метаданных, указываем имя для нашего постоянного тома.
+spec: # Параметры описывающие спецификацю тома
+  capacity:
+    storage: 1Gi # capacity/storage - здесь указываем размер создаваемого раздела
+  volumeMode: Filesystem # volumeMode - этот параметр указывает, как том будет смонтирован в под.
+                        # По умолчанию, в значении этого параметра определено как Filesystem. Поэтому мы можем вообще его пропустить и не указывать в манифесте.
+                        # Этот параметр указывает, что во внутрь пода будет смонтирован каталог. Если же в значении указать - Block, то k8s прокинет блочный девайс во внутрь пода,
+                        # без какой либо файловой системы.
+  accessModes: # accessMode - думаю тут понятно, указываем режим доступа к тому. В нашем случаи указано ReadWriteMany. Что разрешает чтение/записть с разных нод.
+  - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain # persistentVolumeReclaimPolicy - здесь мы указываем, что будет происходить с томом, после удаления запроса на его резервирование.
+                                        # В нашем случаи, мы храним том.
+  storageClassName: my-storage-class-local-disk-not-so-fast # storageClassName - указывается имя storage-класса, к которому будет относиться этот том.
+  local: # local/path - в этом поле указываем тип используемого постоянного поля. И путь к точке на файловой системе НОДЫ, куда мы складываем данные
+    path: /mnt
+  nodeAffinity: # nodeAffinity - этот раздел описывает настройки, позволяющие кубернетесу определить на какой ноде находится local volume.
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - minikube

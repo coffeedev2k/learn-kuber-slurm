@@ -1,0 +1,82 @@
+---
+apiVersion: apps/v1
+kind: Deployment # тип ресурса в кубере, самое важное поле
+metadata:
+  name: deployment-to-persistent-nodes-pvc-provisioner-appversion1 # имя деплоймента, именно к нему идёт привязка, если задеплоить, потом переименовать и задеплоить снова то и со старым именем будет деплой и с новым
+spec:
+  replicas: 2
+  selector:
+    matchLabels:      # задаём, что наш деплоймент рулит нодами, у которых эти лейбы
+      instance: persistent-pvc # ERROR Deployment is invalid spec.selector Invalid value field is immutable # если мы меняем это значение, деплоймент надо пересозавать
+  template:
+    metadata:
+      labels:
+        instance: persistent-pvc
+        appversion: version1
+    spec:
+      containers:
+      - image: adv4000/k8sphp:version1
+        name: k8sphp
+        ports:
+        - containerPort: 80
+        volumeMounts:
+          - name: my-provisioned-data
+            mountPath: /katalog-data-inside-container
+      volumes:
+        - name: my-provisioned-data
+          persistentVolumeClaim:
+            claimName: my-claim-for-provisioned-disk
+###############################################################################################################################
+--- # PersistentVolumeClaim это запрос от кубера, какого типа мы хотим хранилище, чтобы понимать его скорость и тип, а во вторых - размер
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-claim-for-provisioned-disk
+spec:
+  storageClassName: provisioned # в класснейме мы выбираем стораджкласс, который сам нарезает нам разделы
+  accessModes: # параметр доступа к разделу. (В моем случаи полный доступ)
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi # здесь указываем запрашиваемые нами ресурсы для тома. 1 гигабайт спейса.
+###############################################################################################################################
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: provisioned
+provisioner: k8s.io/minikube-hostpath # это провизионер, который и занимается нарезанием размеров разделов для нас
+reclaimPolicy: Retain
+
+
+
+# atarasov@u2204:~/projects/school-dev-k8s$ k exec -it pod/deployment-to-persistent-nodes-pvc-provisioner-appversion1skgtm -- bash
+
+# bash-4.2# ls
+# bin  boot  dev  etc  home  katalog-data-inside-container  lib  lib64  local  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+
+# bash-4.2# touch ./katalog-data-inside-container/hello_from_pod_deployment-to-persistent-nodes-pvc-provisioner-appversion1skgtm
+
+# bash-4.2# ls ./katalog-data-inside-container/
+# hello_from_pod_deployment-to-persistent-nodes-pvc-provisioner-appversion1skgtm
+
+# bash-4.2# exit
+
+# atarasov@u2204:~/projects/school-dev-k8s$ k get all
+# NAME                                                                  READY   STATUS    RESTARTS   AGE
+# pod/deployment-to-persistent-nodes-pvc-provisioner-appversion1skgtm   1/1     Running   0          2m14s
+# pod/deployment-to-persistent-nodes-pvc-provisioner-appversion1stl82   1/1     Running   0          2m14s
+
+# NAME                 TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+# service/kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   2m46s
+
+# NAME                                                                         READY   UP-TO-DATE   AVAILABLE   AGE
+# deployment.apps/deployment-to-persistent-nodes-pvc-provisioner-appversion1   2/2     2            2           2m14s
+
+# NAME                                                                                    DESIRED   CURRENT   READY   AGE
+# replicaset.apps/deployment-to-persistent-nodes-pvc-provisioner-appversion1-59b84866f9   2         2         2       2m14s
+
+# atarasov@u2204:~/projects/school-dev-k8s$ k exec -it pod/deployment-to-persistent-nodes-pvc-provisioner-appversion1stl82 -- bash
+
+# bash-4.2# ls ./katalog-data-inside-container/
+# hello_from_pod_deployment-to-persistent-nodes-pvc-provisioner-appversion1skgtm

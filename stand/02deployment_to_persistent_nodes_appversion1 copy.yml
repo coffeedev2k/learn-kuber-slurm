@@ -4,7 +4,7 @@ kind: Deployment # тип ресурса в кубере, самое важно�
 metadata:
   name: deployment-to-persistent-nodes-appversion1 # имя деплоймента, именно к нему идёт привязка, если задеплоить, потом переименовать и задеплоить снова то и со старым именем будет деплой и с новым
 spec:
-  replicas: 2
+  replicas: 0
   selector:
     matchLabels:      # задаём, что наш деплоймент рулит нодами, у которых эти лейбы
       instance: persistent
@@ -26,9 +26,17 @@ spec:
         ports:
         - containerPort: 80
         volumeMounts:
-        - name: volume-used-as-bind-to-node
-          mountPath: /katalog-where-we-mount-in-container
+        - name: volume-hostpath-used-as-bind-to-node
+          mountPath: /katalog-hostpath-where-we-mount-in-container
+
+        - name: volume-emptydir-used-as-bind-to-node
+          mountPath: /katalog-emptydir-where-we-mount-in-container
+
+
       volumes:
-      - name: volume-used-as-bind-to-node
+      - name: volume-hostpath-used-as-bind-to-node
         hostPath: # самое важное поле, оно рассказывает, что тип маунта - hostPath, что значит, что мы просто маунтим в контейнер каталог с ноды и всё
-          path: /katalog-which-we-mount-on-node # на ноде он создаётся, если его не было ранее
+          path: /katalog-hostpath-which-we-mount-on-node # на ноде он создаётся, если его не было ранее
+
+      - name: volume-emptydir-used-as-bind-to-node
+        emptyDir: {} # здесь у нас нет пути, потому что пустая директория нам нужна
