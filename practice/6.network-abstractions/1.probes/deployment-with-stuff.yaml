@@ -25,13 +25,13 @@ spec:
         ports:
         - containerPort: 80
         readinessProbe:
-          failureThreshold: 3
-          httpGet:
-            path: /
+          failureThreshold: 3 # ждем пока 3 раза зафейлится, пока принимать решение что нода фейлится
+          httpGet: # httpGet это http проба, а может быть exec и тогда здесь может быть команда, также может быть проверка сокета
+            path: / # 200 - 399 коды ответа окей, а 400 и выше - фейлится
             port: 80
-          periodSeconds: 10
-          successThreshold: 1
-          timeoutSeconds: 1
+          periodSeconds: 10 # время между проверками
+          successThreshold: 1 # какое количество сакцессов удостоверит, что контейнер работает
+          timeoutSeconds: 1 # таймаут проверки
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -40,13 +40,13 @@ spec:
           periodSeconds: 10
           successThreshold: 1
           timeoutSeconds: 1
-          initialDelaySeconds: 10
+          initialDelaySeconds: 10 # ранняя версия стартап пробы, ждёт после запуска контейнера пока не начнёт исполняться лайвнесс проба
         startupProbe:
           httpGet:
             path: /
             port: 80
-          failureThreshold: 30
-          periodSeconds: 10
+          failureThreshold: 30 # 30 проваленных проверок
+          periodSeconds: 10 # с периодом 10 секунд
         resources:
           requests:
             cpu: 10m

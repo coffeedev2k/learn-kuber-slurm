@@ -6,34 +6,45 @@ metadata:
     app: node-exporter
   name: node-exporter
 spec:
-  updateStrategy:
+  updateStrategy: # смысл как в деплойменте, но другие слова
     rollingUpdate:
       maxUnavailable: 1
     type: RollingUpdate
   selector:
     matchLabels:
-      app: node-exporter
+      app: node-exporter # запускаем мониторинг
   template:
     metadata:
       labels:
         app: node-exporter
     spec:
       containers:
-      - name: node-exporter
-        image: k8s.gcr.io/pause:3.3
-        imagePullPolicy: IfNotPresent
-        resources:
-          limits:
-            cpu: 10m
-            memory: 64Mi
-          requests:
-            cpu: 10m
-            memory: 64Mi
-      nodeSelector:
-        kubernetes.io/os: linux
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 65534
+      - image: quay.io/testing-farm/nginx:1.12
+        name: nginx
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 80
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 80
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+          initialDelaySeconds: 10
+      nodeSelector: # показывает, что запускать поды надо только на тех нодах, которые:
+        kubernetes.io/os: linux # имеют тег kubernetes.io/os и его значение - linux
+      securityContext: # мы хотим контейнер запускать
+        runAsNonRoot: true # не от рута
+        runAsUser: 65534 # а от пользователя с id 65534
       tolerations:
       - effect: NoSchedule
         key: node-role.kubernetes.io/ingress

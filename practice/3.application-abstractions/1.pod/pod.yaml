@@ -10,4 +10,8 @@ spec:
     name: nginx
     ports:
     - containerPort: 80
+  - image: quay.io/testing-farm/nginx:1.12
+    name: nginx2
+    ports:
+    - containerPort: 81
 ...

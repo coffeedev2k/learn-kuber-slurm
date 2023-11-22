@@ -1,0 +1,141 @@
+---
+apiVersion: apps/v1
+kind: Deployment # тип ресурса в кубере, самое важное поле
+metadata:
+  name: deployment-to-spot-nodes-appversion2 # имя деплоймента, подчёркивания нельзя
+spec:
+  replicas: 0 # можно выставить в ноль и тогда подов не будет =)
+  selector:
+    matchLabels:      # задаём, что наш деплоймент рулит нодами, у которых эти лейбы
+      instance: spot
+  strategy:
+    rollingUpdate:
+      maxSurge: 1   # количество подов, которое мы можем понять сверху(от числа replicas) при деплое на новую версию
+      maxUnavailable: 1 # количество подов, которое мы можем убить(от числа replicas), при деплое
+    type: RollingUpdate
+  # =================== это шаблон, из которого мы создаём поды(создаём их уже в репликасете)
+  template:
+    metadata:
+      labels:
+        instance: spot
+        appversion: version2
+    spec:
+      containers:
+      - image: adv4000/k8sphp:version2
+        name: k8sphp
+        env:
+        - name: nameOfVariableInsidePodContainer # имя переменной
+          value: valueOfVariableInsidePodContainer # значение переменной
+        - name: NameOfSecretVariableInsideContainer
+          valueFrom:
+            secretKeyRef:
+              name: name-of-secret-as-kuber-abstraction-in-manifest # это то имя секрета, которое вы в кубере куберу пишем, чтобы он разбирался что где в деплойментах и подах
+              key: name_of_secret_inside_kuber_list
+
+        # downward API - в под прокидываем данные о том, где мы запущены вообще ==============================================================================================================
+        - name: __NODE_NAME # __NODE_NAME=minikube
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: __POD_NAME # __POD_NAME=deployment-to-spot-nodes-appversion2-57988bdc94-4rzs5
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: __POD_NAMESPACE # __POD_NAMESPACE=default
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: __POD_IP # __POD_IP=10.244.0.35
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: __NODE_IP # __NODE_IP=192.168.58.2
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: __POD_SERVICE_ACCOUNT # __POD_SERVICE_ACCOUNT=default
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        # ==============================================================================================================
+
+        envFrom: # указываем переменные окружения из отдельной абстракции - конфигмапы юзать
+        - configMapRef:
+            name: configmap-for-creating-envs # указываем имя этой конфигмапы - только маленькими буквами и можно тире
+        ports:
+        - containerPort: 80
+        resources:
+          requests: # по реквестам кубер выбирает ноду где запускать под - это запросы ресурсов по сути
+            cpu: 10m # имеется в виду миллискеунды, 10 миллисекунд или 0.01 секунды из целой секунды или 10/1000 или 0.01 от всего одного ядра
+            memory: 100Mi # 100Mi = 100 мегабайт(или мебибайт, не разбирался)
+          limits: # при превышениии лимита контейнер убъется
+            cpu: 100m # имеется в виду миллискеунды, 100 миллисекунд или 0.1 секунды из целой секунды или 100/1000 или 0.1 от всего одного ядра
+            memory: 100Mi
+
+        volumeMounts: # здесь указываем, какой из вольюмов мы хотим монитровать в под
+        - name: name-of-config-volume-that-we-create-from-configmap # мы делаем диск из конфигмапы, чтобы в каталог насоздавать файлов из текста и подмонитровать их в каталог.
+                                                                    # динамично не обновляется, добавляем файл, его нет на диске, поды не пересоздаются
+          mountPath: /etc/nginx/conf.d/ # путь к каталогу внутри контейнера, который мы монтируем
+
+        - name: name-of-volume-for-information-inside-container-from-kubernetes # вольюм маунтим, на котором будут данные от кубернетеса, прокинутые в контейнер
+          mountPath: /etc/podinfo # куда маунтим в контейнере
+
+      volumes: # здесь описываем какой волюм мы хотим сделать из конфигмапы
+      - name: name-of-config-volume-that-we-create-from-configmap
+        configMap:
+          name: configmap-for-creating-volume
+      - name: name-of-volume-for-information-inside-container-from-kubernetes
+        downwardAPI:
+          items:
+            - path: "labels"
+              fieldRef:
+                fieldPath: metadata.labels # это мы лейбы примонтировали в виде ключ-значение appversion="version2" instance="spot"
+
+            - path: "annotations"
+              fieldRef:
+                fieldPath: metadata.annotations  # это мы лейбы примонтировали в виде ключ-значение kubernetes.io/config.seen="2023-11-21T10:28:23.165801282Z"
+  # =================== это шаблон, из которого мы создаём поды(создаём их уже в репликасете)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-for-creating-envs
+data:
+  nameOfVariableInsidePodContainer2: valueOfVariableInsidePodContainer2
+  dbhost: postgresql
+  DEBUG: "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: name-of-secret-as-kuber-abstraction-in-manifest
+stringData:
+  name_of_secret_inside_kuber_list: value_of_secret_inside_kuber_list
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-for-creating-volume
+data:
+  default.conf: |
+    server {
+        listen       80 default_server;
+        server_name  _;
+
+        default_type text/plain;
+
+        location / {
+            return 200 '$hostname\nOK\n';
+        }
+    }
+  default2.conf: |
+    server {
+        listen       80 default_server;
+        server_name  _;
+
+        default_type text/plain;
+
+        location / {
+            return 200 '$hostname\nOK\n';
+        }
+    }

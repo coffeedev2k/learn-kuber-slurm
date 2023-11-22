@@ -27,7 +27,7 @@ spec:
             - name: RABBITMQ_USE_LONGNAME
               value: "true"
             - name: RABBITMQ_NODENAME
-              value: "rabbit@$(MY_POD_IP)"
+              value: "rabbit@$(MY_POD_IP)" # одну переменную подставляем в часть другой - будет rabbit@1.1.1.1
             - name: K8S_SERVICE_NAME
               value: "rabbitmq"
             - name: RABBITMQ_ERLANG_COOKIE
@@ -45,7 +45,7 @@ spec:
               memory: 256Mi
           livenessProbe:
             exec:
-              command: ["rabbitmqctl", "status"]
+              command: ["rabbitmqctl", "status"] # запускаем в контенере нативно и проверяем статус выхода - если не 0, проба провалена
             initialDelaySeconds: 60
             periodSeconds: 60
             timeoutSeconds: 15
@@ -71,8 +71,8 @@ spec:
               - key: enabled_plugins
                 path: enabled_plugins
       affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
+        podAntiAffinity: # метод максимально размазать поды по нодам кластера, не запускать их на одной ноде
+          preferredDuringSchedulingIgnoredDuringExecution: # требование должно выполниться в процессе шедулинга, но игнорироваться в процессе запуска
             - weight: 100
               podAffinityTerm:
                 labelSelector:
@@ -81,7 +81,7 @@ spec:
                       operator: In
                       values:
                         - rabbitmq
-                topologyKey: kubernetes.io/hostname
+                topologyKey: kubernetes.io/hostname # берём за основу имя ноды и исходя из нёё ориентируемся
   volumeClaimTemplates:
     - metadata:
         name: data

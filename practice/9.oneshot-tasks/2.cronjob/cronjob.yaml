@@ -1,12 +1,26 @@
 ---
-apiVersion: batch/v1beta1
+apiVersion: batch/v1 # и новых версиях batch/v1
 kind: CronJob
 metadata:
   name: hello
 spec:
+  # # Example of job definition:
+            # .---------------- minute (0 - 59)
+            # |  .------------- hour (0 - 23)
+            # |  |  .---------- day of month (1 - 31)
+            # |  |  |  .------- month (1 - 12) OR jan,feb,mar,apr ...
+            # |  |  |  |  .---- day of week (0 - 6) (Sunday=0 or 7) OR sun,mon,tue,wed,thu,fri,sat
+            # |  |  |  |  |
+            # *  *  *  *  * user-name command to be executed
   schedule: "*/1 * * * *"
-  concurrencyPolicy: Allow
-  jobTemplate:
+  concurrencyPolicy: Allow # запускать ли следующие, если предыдущий ещё не завершился,
+                           # Forbid не позволит так сделать, бестпрактис выставлять запрет, чтобы не положить кластер
+                           # Replace убъет предыдущий и запустит новый, тоже спорный вариант
+  successfulJobsHistoryLimit: 3 # сколько успешных джобов сохранять в историю, чтобы не захламлять вывод команд, по умолчанию 3
+  failedJobsHistoryLimit: 1 # сколько НЕуспешных джобов сохранять в историю, чтобы не захламлять вывод команд, по умолчанию 1
+  startingDeadlineSeconds: 20 # приемлимое время отставания от времени расписания, если джоба была не запущена за это отставание, то уже и не запустится. Можно огрести, смотри ссылку
+                              # бестпрактис выставлять менее, чем время между запусками
+  jobTemplate: # всё как в описании джобов
     spec:
       backoffLimit: 2
       activeDeadlineSeconds: 100
