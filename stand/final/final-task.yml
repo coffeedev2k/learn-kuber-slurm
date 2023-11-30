@@ -1,0 +1,308 @@
+---
+apiVersion: apps/v1
+kind: Deployment # тип ресурса в кубере, самое важное поле
+metadata:
+  name: deployment-to-persistent-nodes-pvc-provisioner-appversion1 # имя деплоймента, именно к нему идёт привязка, если задеплоить, потом переименовать и задеплоить снова то и со старым именем будет деплой и с новым
+spec:
+  replicas: 2
+  selector:
+    matchLabels:      # задаём, что наш деплоймент рулит нодами, у которых эти лейбы
+      instance: persistent
+
+  strategy:
+    rollingUpdate:
+      maxSurge: 1   # количество подов, которое мы можем понять сверху(от числа replicas) при деплое на новую версию
+      maxUnavailable: 1 # количество подов, которое мы можем убить(от числа replicas), при деплое
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        instance: persistent
+        appversion: version1
+        appname: resolve-ip-app
+    spec:
+      initContainers:
+      - image: busybox
+        name: mount-permissions-fix
+        command: ["sh", "-c", "chmod 777 /katalog-data-inside-container"]
+        volumeMounts:
+        - name: my-provisioned-data
+          mountPath: /katalog-data-inside-container
+      containers:
+      - image: adv4000/k8sphp:version2
+        name: k8sphp
+        env:
+        - name: nameOfVariableInsidePodContainer # имя переменной
+          value: valueOfVariableInsidePodContainer # значение переменной
+        - name: NameOfSecretVariableInsideContainer
+          valueFrom:
+            secretKeyRef:
+              name: name-of-secret-as-kuber-abstraction-in-manifest # это то имя секрета, которое вы в кубере куберу пишем, чтобы он разбирался что где в деплойментах и подах
+              key: name_of_secret_inside_kuber_list
+
+        # downward API - в под прокидываем данные о том, где мы запущены вообще ==============================================================================================================
+        - name: __NODE_NAME # __NODE_NAME=minikube
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: "__POD_NAME$(__NODE_NAME)" # __POD_NAME=deployment-to-spot-nodes-appversion2-57988bdc94-4rzs5
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: __POD_NAMESPACE # __POD_NAMESPACE=default
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: __POD_IP # __POD_IP=10.244.0.35
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: __NODE_IP # __NODE_IP=192.168.58.2
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: __POD_SERVICE_ACCOUNT # __POD_SERVICE_ACCOUNT=default
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
+        # ==============================================================================================================
+
+        envFrom: # указываем переменные окружения из отдельной абстракции - конфигмапы юзать
+        - configMapRef:
+            name: configmap-for-creating-envs # указываем имя этой конфигмапы - только маленькими буквами и можно тире
+        ports:
+        - containerPort: 80
+        resources:
+          requests: # по реквестам кубер выбирает ноду где запускать под - это запросы ресурсов по сути
+            cpu: 10m # имеется в виду миллискеунды, 10 миллисекунд или 0.01 секунды из целой секунды или 10/1000 или 0.01 от всего одного ядра
+            memory: 100Mi # 100Mi = 100 мегабайт(или мебибайт, не разбирался)
+          limits: # при превышениии лимита контейнер убъется
+            cpu: 100m # имеется в виду миллискеунды, 100 миллисекунд или 0.1 секунды из целой секунды или 100/1000 или 0.1 от всего одного ядра
+            memory: 100Mi
+        readinessProbe:
+          failureThreshold: 3 # ждем пока 3 раза зафейлится, пока принимать решение что нода фейлится
+          httpGet: # httpGet это http проба, а может быть exec и тогда здесь может быть команда, также может быть проверка сокета
+            path: / # 200 - 399 коды ответа окей, а 400 и выше - фейлится
+            port: 80
+          periodSeconds: 10 # время между проверками
+          successThreshold: 1 # какое количество сакцессов удостоверит, что контейнер работает
+          timeoutSeconds: 1 # таймаут проверки
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /
+            port: 80
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+          initialDelaySeconds: 10 # ранняя версия стартап пробы, ждёт после запуска контейнера пока не начнёт исполняться лайвнесс проба
+        startupProbe:
+          httpGet:
+            path: /
+            port: 80
+          failureThreshold: 30 # 30 проваленных проверок
+          periodSeconds: 10 # с периодом 10 секунд
+
+        volumeMounts: # здесь указываем, какой из вольюмов мы хотим монитровать в под
+        - name: name-of-config-volume-that-we-create-from-configmap # мы делаем диск из конфигмапы, чтобы в каталог насоздавать файлов из текста и подмонитровать их в каталог.
+                                                                    # динамично не обновляется, добавляем файл, его нет на диске, поды не пересоздаются
+          mountPath: /etc/nginx/conf.d/ # путь к каталогу внутри контейнера, который мы монтируем
+
+        - name: name-of-volume-for-information-inside-container-from-kubernetes # вольюм маунтим, на котором будут данные от кубернетеса, прокинутые в контейнер
+          mountPath: /etc/podinfo # куда маунтим в контейнере
+
+        - name: my-provisioned-data
+          mountPath: /katalog-data-inside-container
+
+        - name: volume-emptydir-used-as-bind-to-node
+          mountPath: /katalog-emptydir-where-we-mount-in-container
+      volumes: # здесь описываем какой волюм мы хотим сделать из конфигмапы
+      - name: name-of-config-volume-that-we-create-from-configmap
+        configMap:
+          name: configmap-for-creating-volume
+      - name: name-of-volume-for-information-inside-container-from-kubernetes
+        downwardAPI:
+          items:
+            - path: "labels"
+              fieldRef:
+                fieldPath: metadata.labels # это мы лейбы примонтировали в виде ключ-значение appversion="version2" instance="spot"
+
+            - path: "annotations"
+              fieldRef:
+                fieldPath: metadata.annotations  # это мы лейбы примонтировали в виде ключ-значение kubernetes.io/config.seen="2023-11-21T10:28:23.165801282Z"
+      - name: my-provisioned-data
+        persistentVolumeClaim:
+          claimName: my-claim-for-provisioned-disk
+      - name: volume-emptydir-used-as-bind-to-node
+        emptyDir: {} # здесь у нас нет пути, потому что пустая директория нам нужна
+###############################################################################################################################
+--- # PersistentVolumeClaim это запрос от кубера, какого типа мы хотим хранилище, чтобы понимать его скорость и тип, а во вторых - размер
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-claim-for-provisioned-disk
+spec:
+  storageClassName: provisioned # в класснейме мы выбираем стораджкласс, который сам нарезает нам разделы
+  accessModes: # параметр доступа к разделу. (В моем случаи полный доступ)
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi # здесь указываем запрашиваемые нами ресурсы для тома. 1 гигабайт спейса.
+###############################################################################################################################
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: provisioned
+provisioner: k8s.io/minikube-hostpath # это провизионер, который и занимается нарезанием размеров разделов для нас
+reclaimPolicy: Retain
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-for-creating-envs
+data:
+  nameOfVariableInsidePodContainer2: valueOfVariableInsidePodContainer2
+  dbhost: postgresql
+  DEBUG: "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: name-of-secret-as-kuber-abstraction-in-manifest
+stringData:
+  name_of_secret_inside_kuber_list: value_of_secret_inside_kuber_list
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap-for-creating-volume
+data:
+  default.conf: |
+    server {
+        listen       80 default_server;
+        server_name  _;
+
+        default_type text/plain;
+
+        location / {
+            return 200 '$hostname\nOK\n';
+        }
+    }
+  default2.conf: |
+    server {
+        listen       80 default_server;
+        server_name  _;
+
+        default_type text/plain;
+
+        location / {
+            return 200 '$hostname\nOK\n';
+        }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-ip-for-resolve-ip-app
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    appname: resolve-ip-app
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-name-for-our-app # имя нашего ингресса, которое используется для доступа на поды приложения
+  annotations:
+    # nginx.ingress.kubernetes.io/backend-protocol: "HTTPS" # вот так дополнительно конфигурируется ингресс теми конфигами, которые недоступны в описании ямл кубера
+spec:
+  rules:
+  - host: foo.mydomain.com # curl --resolve "foo.mydomain.com:80:$( minikube ip )" -i http://foo.mydomain.com
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: service-ip-for-resolve-ip-app # ищет имя сервиса, а сам обращается на поды этого сервиса, обманщик!!!
+            port:
+              number: 80
+---
+apiVersion: batch/v1 # и новых версиях batch/v1
+kind: CronJob
+metadata:
+  name: cronjob-name-here
+spec:
+  # # Example of job definition:
+            # .---------------- minute (0 - 59)
+            # |  .------------- hour (0 - 23)
+            # |  |  .---------- day of month (1 - 31)
+            # |  |  |  .------- month (1 - 12) OR jan,feb,mar,apr ...
+            # |  |  |  |  .---- day of week (0 - 6) (Sunday=0 or 7) OR sun,mon,tue,wed,thu,fri,sat
+            # |  |  |  |  |
+            # *  *  *  *  * user-name command to be executed
+  schedule: "*/2 * * * *"
+  concurrencyPolicy: Allow # запускать ли следующие, если предыдущий ещё не завершился,
+                            # Forbid не позволит так сделать, бестпрактис выставлять запрет, чтобы не положить кластер
+                            # Replace убъет предыдущий и запустит новый, тоже спорный вариант
+  successfulJobsHistoryLimit: 3 # сколько успешных джобов сохранять в историю, чтобы не захламлять вывод команд, по умолчанию 3
+  failedJobsHistoryLimit: 1 # сколько НЕуспешных джобов сохранять в историю, чтобы не захламлять вывод команд, по умолчанию 1
+  startingDeadlineSeconds: 20 # приемлимое время отставания от времени расписания, если джоба была не запущена за это отставание, то уже и не запустится. Можно огрести, смотри ссылку
+                              # бестпрактис выставлять менее, чем время между запусками
+  jobTemplate: # всё как в описании джобов
+    spec:
+      backoffLimit: 2 # если после двух попыток не будет выхода 0, то третьей попытки не будет
+      activeDeadlineSeconds: 200 # ждём после запуска 60 секунд и если не завершилась, то кубер считает что зависло
+      template:
+        spec:
+          containers:
+          - name: name-pod-of-cronjob-cronjob-name-here
+            image: quay.io/prometheus/busybox
+            args:
+            - /bin/sh
+            - -c
+            - date; echo Hello from the Kubernetes cluster; sleep 100 # по коду выхода этой команды кубер понимает, зафейлилась задача или была успешна
+          restartPolicy: Never
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: node-exporter
+  name: node-exporter
+spec:
+  updateStrategy: # смысл как в деплойменте, но другие слова
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: node-exporter # запускаем мониторинг
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      containers:
+      - name: node-exporter
+        image: k8s.gcr.io/pause:3.3
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 10m
+            memory: 64Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+      nodeSelector: # показывает, что запускать поды надо только на тех нодах, которые:
+        kubernetes.io/os: linux # имеют тег kubernetes.io/os и его значение - linux
+      securityContext: # мы хотим контейнер запускать
+        runAsNonRoot: true # не от рута
+        runAsUser: 65534 # а от пользователя с id 65534
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/ingress

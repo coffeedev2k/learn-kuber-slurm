@@ -66,8 +66,8 @@ spec:
           configMap:
             name: rabbitmq-config
             items:
-              - key: rabbitmq.conf
-                path: rabbitmq.conf
+              - key: rabbitmq.conf # имя файла, которое мы создаём внутри пода
+                path: rabbitmq.conf # файл, который мы берём из config-volume, они могут быть разными со строчкой выше
               - key: enabled_plugins
                 path: enabled_plugins
       affinity:
