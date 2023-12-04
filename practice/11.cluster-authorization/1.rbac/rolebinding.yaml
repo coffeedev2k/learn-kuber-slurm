@@ -1,13 +1,13 @@
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: RoleBinding # kind для биндинга
 metadata:
-  name: user
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: view
+  name: user # имя для этого биндинга
+roleRef: # здесь описывается какие права мы даём
+  apiGroup: rbac.authorization.k8s.io # берём определённую апи группу
+  kind: ClusterRole # берем кластерную роль
+  name: view # по имени view - как раз эти права получит юзер user, права на просмотр
 subjects:
   - kind: ServiceAccount
-    name: user
-    namespace: s<номер студента>
+    name: user # имя юзера для биндинга
+    namespace: default # имя неймспейса для биндинга
