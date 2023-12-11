@@ -138,7 +138,7 @@ Accept-Ranges: bytes
 отредактируем деплоймент ингресса
 
 ```bash
-kubectl edit deployment -n ingress-nginx ingress-nginx-controller
+EDITOR=mcedit kubectl edit deployment -n ingress-nginx ingress-nginx-controller
 ```
 
 В него нужно добавить на уровне темплейта пода две аннотации:

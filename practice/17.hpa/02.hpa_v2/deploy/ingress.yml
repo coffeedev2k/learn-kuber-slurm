@@ -5,7 +5,7 @@ metadata:
   name: hpa-v2-test
 spec:
   rules:
-  - host: hpa-v2-test.<External Ingress IP>.nip.io
+  - host: hpa-v2-test.192.168.49.2.nip.io
     http:
       paths:
       - pathType: Prefix
