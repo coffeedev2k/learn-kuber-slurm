@@ -3,3 +3,23 @@ replicas: 2
 image:
   repository: nginx
   tag: 1.21
+
+port: 80
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 100Mi
+  limits:
+    cpu: 100m
+    memory: 100Mi
+
+annotations:
+  one: two
+  foo: bar
+  tree: tads
+
+env:
+  one1: two1
+  foo1: bar1
+  tree1: tads1
