@@ -4,6 +4,7 @@ kind: Pod
 metadata:
   name: "{{ .Release.Name }}-credentials-test"
   annotations:
+    "helm.sh/hook-delete-policy": hook-succeeded
     "helm.sh/hook": test-success
 spec:
   {{- if .Values.podSecurityContext.enabled }}
@@ -20,7 +21,7 @@ spec:
         - name: MARIADB_HOST
           value: {{ include "wordpress.databaseHost" . | quote }}
         - name: MARIADB_PORT
-          value: "3306"
+          value: "3333"
         - name: WORDPRESS_DATABASE_NAME
           value: {{ default "" .Values.mariadb.auth.database | quote }}
         - name: WORDPRESS_DATABASE_USER
