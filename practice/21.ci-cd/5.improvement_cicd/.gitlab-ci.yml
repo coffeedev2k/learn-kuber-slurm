@@ -49,7 +49,7 @@ helm_lint:
   stage: linter
   image: centosadmin/kubernetes-helm:3.6.3
   environment:
-    name: production
+    name: development
   script:
     - helm lint .helm
         --set image=$CI_REGISTRY_IMAGE
@@ -61,7 +61,7 @@ template:
   stage: template
   image: centosadmin/kubernetes-helm:3.6.3
   environment:
-    name: production
+    name: development
   script:
     - helm template $CI_PROJECT_PATH_SLUG .helm
         --set image=$CI_REGISTRY_IMAGE
