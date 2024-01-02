@@ -118,4 +118,4 @@ startupProbe:
     path: /startup
     port: 80
   failureThreshold: 3 # 30 проваленных проверок
-  periodSeconds: 10 # с периодом 10 секунд
+  periodSeconds: 11 # с периодом 10 секунд
